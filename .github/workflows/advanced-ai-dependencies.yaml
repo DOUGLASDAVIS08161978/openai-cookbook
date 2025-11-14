@@ -10,6 +10,8 @@ jobs:
   check-updates:
     name: Check for Dependency Updates
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
       - name: Checkout code
@@ -120,6 +122,8 @@ jobs:
   compatibility-check:
     name: Python Version Compatibility
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       matrix:
         python-version: ['3.9', '3.10', '3.11', '3.12']
@@ -160,6 +164,8 @@ jobs:
   performance-check:
     name: Dependency Performance Check
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
       - name: Checkout code

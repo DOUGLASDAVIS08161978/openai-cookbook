@@ -18,6 +18,8 @@ jobs:
   test-notebook:
     name: Test Advanced AI Notebook
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
       - name: Checkout code
@@ -102,6 +104,8 @@ jobs:
   test-integration:
     name: Integration Tests (with API)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     # Only run on manual trigger or schedule, not on every push
     
@@ -133,6 +137,8 @@ jobs:
   code-quality:
     name: Code Quality Checks
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
       - name: Checkout code
