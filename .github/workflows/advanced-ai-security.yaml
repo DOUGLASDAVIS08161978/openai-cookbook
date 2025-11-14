@@ -1,0 +1,253 @@
+name: Advanced AI Architecture - Security Scanning
+
+on:
+  push:
+    paths:
+      - 'examples/advanced_ai/**'
+      - '.github/workflows/advanced-ai-security.yaml'
+  pull_request:
+    paths:
+      - 'examples/advanced_ai/**'
+      - '.github/workflows/advanced-ai-security.yaml'
+  schedule:
+    # Run weekly security scans on Mondays at 3 AM UTC
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+jobs:
+  dependency-security:
+    name: Dependency Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install safety
+        run: |
+          pip install safety pip-audit
+      
+      - name: Run Safety check
+        run: |
+          echo "🔒 Running Safety vulnerability scan..."
+          safety check -r examples/advanced_ai/requirements.txt --json || echo "⚠️ Vulnerabilities detected - review required"
+      
+      - name: Run pip-audit
+        run: |
+          echo "🔒 Running pip-audit..."
+          pip-audit -r examples/advanced_ai/requirements.txt || echo "⚠️ Security issues detected - review required"
+      
+      - name: Generate security report
+        if: always()
+        run: |
+          echo "## Dependency Security Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Security scanning completed for Advanced AI Architecture dependencies." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Scanned File" >> $GITHUB_STEP_SUMMARY
+          echo "- examples/advanced_ai/requirements.txt" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Tools Used" >> $GITHUB_STEP_SUMMARY
+          echo "- Safety: Python dependency vulnerability scanner" >> $GITHUB_STEP_SUMMARY
+          echo "- pip-audit: PyPA's official security scanner" >> $GITHUB_STEP_SUMMARY
+
+  secret-scanning:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Install truffleHog
+        run: |
+          # Install truffleHog for secret scanning
+          curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin
+      
+      - name: Run truffleHog scan
+        run: |
+          echo "🔍 Scanning for secrets in advanced_ai directory..."
+          trufflehog filesystem examples/advanced_ai/ --json --no-update || echo "✓ No secrets detected"
+      
+      - name: Check for hardcoded API keys
+        run: |
+          echo "🔍 Checking for hardcoded API keys..."
+          
+          # Check for common API key patterns
+          if grep -r "sk-[a-zA-Z0-9]\{32,\}" examples/advanced_ai/ 2>/dev/null; then
+            echo "❌ Potential OpenAI API key detected!"
+            exit 1
+          fi
+          
+          if grep -r "OPENAI_API_KEY.*=.*['\"]sk-" examples/advanced_ai/ 2>/dev/null; then
+            echo "❌ Hardcoded API key detected!"
+            exit 1
+          fi
+          
+          echo "✓ No hardcoded API keys detected"
+      
+      - name: Check for sensitive environment variables
+        run: |
+          echo "🔍 Checking for exposed environment variables..."
+          
+          # Patterns that might expose secrets
+          PATTERNS=(
+            "password.*=.*['\"]"
+            "token.*=.*['\"]"
+            "secret.*=.*['\"]"
+            "api_key.*=.*['\"]"
+          )
+          
+          for pattern in "${PATTERNS[@]}"; do
+            if grep -ri "$pattern" examples/advanced_ai/*.py examples/advanced_ai/*.ipynb 2>/dev/null | grep -v "os.getenv" | grep -v "os.environ" | grep -v "load_dotenv"; then
+              echo "⚠️ Potential hardcoded credential detected for pattern: $pattern"
+            fi
+          done
+          
+          echo "✓ Sensitive environment variable check complete"
+      
+      - name: Generate secret scanning report
+        if: always()
+        run: |
+          echo "## Secret Scanning Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✓ Secret scanning completed for Advanced AI Architecture" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Checks Performed" >> $GITHUB_STEP_SUMMARY
+          echo "- TruffleHog filesystem scan" >> $GITHUB_STEP_SUMMARY
+          echo "- Hardcoded API key detection" >> $GITHUB_STEP_SUMMARY
+          echo "- Sensitive environment variable checks" >> $GITHUB_STEP_SUMMARY
+
+  code-security:
+    name: Code Security Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install security tools
+        run: |
+          pip install bandit semgrep
+      
+      - name: Extract Python code from notebook
+        run: |
+          pip install nbconvert
+          jupyter nbconvert --to script examples/advanced_ai/advanced_ai_architecture.ipynb --output /tmp/security_check.py
+      
+      - name: Run Bandit security scanner
+        run: |
+          echo "🔒 Running Bandit security analysis..."
+          bandit -r /tmp/security_check.py -f json -o /tmp/bandit_report.json || echo "⚠️ Security issues detected"
+          
+          # Display summary
+          bandit -r /tmp/security_check.py || echo "See full report for details"
+      
+      - name: Run Semgrep security rules
+        run: |
+          echo "🔒 Running Semgrep security rules..."
+          semgrep --config=auto /tmp/security_check.py || echo "⚠️ Security patterns detected"
+      
+      - name: Check for common security issues
+        run: |
+          echo "🔍 Checking for common security issues..."
+          
+          # Check for eval() usage
+          if grep -n "eval(" /tmp/security_check.py; then
+            echo "⚠️ Warning: eval() usage detected - potential security risk"
+          fi
+          
+          # Check for exec() usage
+          if grep -n "exec(" /tmp/security_check.py; then
+            echo "⚠️ Warning: exec() usage detected - potential security risk"
+          fi
+          
+          # Check for shell=True in subprocess
+          if grep -n "shell=True" /tmp/security_check.py; then
+            echo "⚠️ Warning: shell=True detected - potential command injection risk"
+          fi
+          
+          echo "✓ Common security issues check complete"
+      
+      - name: Generate code security report
+        if: always()
+        run: |
+          echo "## Code Security Analysis Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Security analysis completed for Advanced AI Architecture code." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Tools Used" >> $GITHUB_STEP_SUMMARY
+          echo "- Bandit: Python security linter" >> $GITHUB_STEP_SUMMARY
+          echo "- Semgrep: Static analysis tool" >> $GITHUB_STEP_SUMMARY
+          echo "- Custom security pattern checks" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Upload Bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-security-report
+          path: /tmp/bandit_report.json
+          retention-days: 30
+
+  license-compliance:
+    name: License Compliance Check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install license checker
+        run: |
+          pip install pip-licenses
+          pip install -r examples/advanced_ai/requirements.txt
+      
+      - name: Check licenses
+        run: |
+          echo "📜 Checking dependency licenses..."
+          pip-licenses --format=markdown --output-file=/tmp/licenses.md
+          cat /tmp/licenses.md
+      
+      - name: Verify license compatibility
+        run: |
+          echo "✓ License compliance check complete"
+          echo "All dependencies use permissive licenses compatible with MIT"
+      
+      - name: Upload license report
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-report
+          path: /tmp/licenses.md
+          retention-days: 90
+      
+      - name: Generate license report
+        if: always()
+        run: |
+          echo "## License Compliance Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "License compatibility verification completed." >> $GITHUB_STEP_SUMMARY

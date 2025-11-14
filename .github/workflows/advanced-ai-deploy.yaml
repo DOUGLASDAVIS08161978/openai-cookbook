@@ -1,0 +1,351 @@
+name: Advanced AI Architecture - Deployment & Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'examples/advanced_ai/**'
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      deploy_environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+jobs:
+  validate-before-deploy:
+    name: Pre-Deployment Validation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install dependencies
+        run: |
+          pip install -r examples/advanced_ai/requirements.txt
+          pip install nbformat nbconvert
+      
+      - name: Validate all files exist
+        run: |
+          echo "🔍 Validating deployment package..."
+          
+          # Required files
+          REQUIRED_FILES=(
+            "examples/advanced_ai/advanced_ai_architecture.ipynb"
+            "examples/advanced_ai/README.md"
+            "examples/advanced_ai/requirements.txt"
+          )
+          
+          for file in "${REQUIRED_FILES[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "❌ Required file missing: $file"
+              exit 1
+            fi
+            echo "✓ Found: $file"
+          done
+          
+          echo "✓ All required files present"
+      
+      - name: Validate notebook integrity
+        run: |
+          python3 << 'EOF'
+          import nbformat
+          import sys
+          
+          try:
+              with open('examples/advanced_ai/advanced_ai_architecture.ipynb', 'r') as f:
+                  nb = nbformat.read(f, as_version=4)
+              
+              assert len(nb.cells) > 0, 'Notebook has no cells'
+              
+              code_cells = sum(1 for cell in nb.cells if cell.cell_type == 'code')
+              markdown_cells = sum(1 for cell in nb.cells if cell.cell_type == 'markdown')
+              
+              print(f'Notebook has {len(nb.cells)} cells')
+              print(f'Code cells: {code_cells}')
+              print(f'Markdown cells: {markdown_cells}')
+              print('Notebook integrity validated')
+              
+          except Exception as e:
+              print(f'Notebook validation failed: {e}')
+              sys.exit(1)
+          EOF
+      
+      - name: Check documentation quality
+        run: |
+          echo "📖 Checking documentation quality..."
+          
+          # Check README word count
+          WORD_COUNT=$(wc -w < examples/advanced_ai/README.md)
+          echo "README word count: $WORD_COUNT"
+          
+          if [ $WORD_COUNT -lt 500 ]; then
+            echo "⚠️ README is quite short (< 500 words)"
+          else
+            echo "✓ README has substantial content"
+          fi
+          
+          # Check for required sections
+          grep -q "Installation" examples/advanced_ai/README.md && echo "✓ Installation section found"
+          grep -q "Usage" examples/advanced_ai/README.md && echo "✓ Usage section found"
+          grep -q "CI/CD" examples/advanced_ai/README.md && echo "✓ CI/CD section found"
+
+  generate-documentation:
+    name: Generate Documentation
+    needs: validate-before-deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install documentation tools
+        run: |
+          pip install nbconvert jupyter
+          pip install -r examples/advanced_ai/requirements.txt
+      
+      - name: Convert notebook to HTML
+        run: |
+          echo "📄 Generating HTML documentation..."
+          jupyter nbconvert --to html examples/advanced_ai/advanced_ai_architecture.ipynb \
+            --output-dir=/tmp/docs \
+            --output=advanced_ai_architecture.html
+          
+          echo "✓ HTML documentation generated"
+      
+      - name: Convert notebook to Markdown
+        run: |
+          echo "📄 Generating Markdown documentation..."
+          jupyter nbconvert --to markdown examples/advanced_ai/advanced_ai_architecture.ipynb \
+            --output-dir=/tmp/docs \
+            --output=advanced_ai_architecture.md
+          
+          echo "✓ Markdown documentation generated"
+      
+      - name: Generate PDF (optional)
+        run: |
+          echo "📄 Attempting PDF generation..."
+          # PDF generation requires additional dependencies
+          # This is optional and may fail if dependencies aren't available
+          jupyter nbconvert --to pdf examples/advanced_ai/advanced_ai_architecture.ipynb \
+            --output-dir=/tmp/docs \
+            --output=advanced_ai_architecture.pdf 2>/dev/null || echo "⚠️ PDF generation skipped (missing dependencies)"
+      
+      - name: Create documentation package
+        run: |
+          echo "📦 Creating documentation package..."
+          mkdir -p /tmp/docs/package
+          cp examples/advanced_ai/README.md /tmp/docs/package/
+          cp /tmp/docs/advanced_ai_architecture.html /tmp/docs/package/ 2>/dev/null || true
+          cp /tmp/docs/advanced_ai_architecture.md /tmp/docs/package/ 2>/dev/null || true
+          cp /tmp/docs/advanced_ai_architecture.pdf /tmp/docs/package/ 2>/dev/null || true
+          
+          echo "✓ Documentation package created"
+      
+      - name: Upload documentation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation-package
+          path: /tmp/docs/package/
+          retention-days: 90
+      
+      - name: Generate documentation report
+        run: |
+          echo "## Documentation Generation Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✓ HTML documentation generated" >> $GITHUB_STEP_SUMMARY
+          echo "✓ Markdown documentation generated" >> $GITHUB_STEP_SUMMARY
+          echo "✓ Documentation package created" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- HTML version of notebook" >> $GITHUB_STEP_SUMMARY
+          echo "- Markdown version of notebook" >> $GITHUB_STEP_SUMMARY
+          echo "- README.md" >> $GITHUB_STEP_SUMMARY
+
+  version-tagging:
+    name: Version Tagging
+    needs: validate-before-deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Determine version
+        id: version
+        run: |
+          # Get current date for version
+          VERSION_DATE=$(date +%Y.%m.%d)
+          
+          # Check if there are any tags
+          if git describe --tags --abbrev=0 2>/dev/null; then
+            LAST_TAG=$(git describe --tags --abbrev=0)
+            echo "Last tag: $LAST_TAG"
+          fi
+          
+          # Generate new version tag
+          NEW_TAG="advanced-ai-v${VERSION_DATE}"
+          echo "New tag: $NEW_TAG"
+          echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
+      
+      - name: Create version metadata
+        run: |
+          mkdir -p /tmp/version
+          cat > /tmp/version/VERSION.json <<'EOFMARKER'
+          {
+            "example": "advanced_ai_architecture",
+            "version": "${{ steps.version.outputs.tag }}",
+            "release_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "commit_sha": "${{ github.sha }}",
+            "repository": "${{ github.repository }}"
+          }
+          EOFMARKER
+          cat /tmp/version/VERSION.json
+      
+      - name: Upload version metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: version-metadata
+          path: /tmp/version/VERSION.json
+          retention-days: 365
+
+  deploy-staging:
+    name: Deploy to Staging
+    needs: [validate-before-deploy, generate-documentation]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_environment == 'staging'
+    environment:
+      name: staging
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Deploy to staging
+        run: |
+          echo "🚀 Deploying to staging environment..."
+          echo "✓ Deployment simulation complete"
+          echo "In a real scenario, this would:"
+          echo "  - Upload to staging server"
+          echo "  - Update staging documentation"
+          echo "  - Run staging smoke tests"
+      
+      - name: Generate staging deployment report
+        run: |
+          echo "## Staging Deployment Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✓ Deployed to staging environment" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: staging" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+
+  deploy-production:
+    name: Deploy to Production
+    needs: [validate-before-deploy, generate-documentation]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_environment == 'production')
+    environment:
+      name: production
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Deploy to production
+        run: |
+          echo "🚀 Deploying to production environment..."
+          echo "✓ Deployment simulation complete"
+          echo "In a real scenario, this would:"
+          echo "  - Upload to production server"
+          echo "  - Update production documentation"
+          echo "  - Notify stakeholders"
+          echo "  - Update changelog"
+      
+      - name: Generate production deployment report
+        run: |
+          echo "## Production Deployment Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✓ Deployed to production environment" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: production" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+
+  automated-updates:
+    name: Automated Dependency Updates
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    if: github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Check for outdated dependencies
+        run: |
+          echo "🔍 Checking for outdated dependencies..."
+          pip install -r examples/advanced_ai/requirements.txt
+          pip list --outdated || echo "All dependencies are up to date"
+      
+      - name: Generate update recommendations
+        run: |
+          echo "## Dependency Update Recommendations" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Run \`pip list --outdated\` to see available updates." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Note**: Always test thoroughly after updating dependencies." >> $GITHUB_STEP_SUMMARY
+
+  notification:
+    name: Deployment Notification
+    needs: [deploy-staging, deploy-production]
+    runs-on: ubuntu-latest
+    permissions: {}
+    if: always()
+    
+    steps:
+      - name: Send notification
+        run: |
+          echo "📢 Deployment process completed"
+          echo "Check the workflow summary for details"
+          
+          # In a real scenario, this would send notifications via:
+          # - Slack
+          # - Email
+          # - Teams
+          # - Custom webhooks

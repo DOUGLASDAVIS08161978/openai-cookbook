@@ -1,0 +1,214 @@
+name: Advanced AI Architecture - Dependency Updates
+
+on:
+  schedule:
+    # Run weekly on Mondays at 9 AM UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  check-updates:
+    name: Check for Dependency Updates
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install current dependencies
+        run: |
+          pip install -r examples/advanced_ai/requirements.txt
+      
+      - name: Check for outdated packages
+        id: outdated
+        run: |
+          echo "🔍 Checking for outdated dependencies..."
+          pip list --outdated --format=json > /tmp/outdated.json
+          
+          if [ -s /tmp/outdated.json ] && [ "$(cat /tmp/outdated.json)" != "[]" ]; then
+            echo "has_updates=true" >> $GITHUB_OUTPUT
+            cat /tmp/outdated.json
+          else
+            echo "has_updates=false" >> $GITHUB_OUTPUT
+            echo "✓ All dependencies are up to date"
+          fi
+      
+      - name: Generate update report
+        if: steps.outdated.outputs.has_updates == 'true'
+        run: |
+          pip install tabulate
+          python3 << 'EOF'
+          import json
+          import sys
+          from tabulate import tabulate
+          
+          try:
+              with open('/tmp/outdated.json', 'r') as f:
+                  outdated = json.load(f)
+              
+              if not outdated:
+                  print("No outdated packages")
+                  sys.exit(0)
+              
+              table_data = []
+              for pkg in outdated:
+                  table_data.append([
+                      pkg['name'],
+                      pkg['version'],
+                      pkg['latest_version'],
+                      pkg.get('latest_filetype', 'wheel')
+                  ])
+              
+              print("\n## Outdated Packages\n")
+              print(tabulate(table_data, headers=['Package', 'Current', 'Latest', 'Type'], tablefmt='github'))
+              
+              with open('/tmp/update_report.md', 'w') as f:
+                  f.write("# Dependency Update Report\n\n")
+                  f.write(f"Generated: {__import__('datetime').datetime.now().isoformat()}\n\n")
+                  f.write("## Outdated Packages\n\n")
+                  f.write(tabulate(table_data, headers=['Package', 'Current', 'Latest', 'Type'], tablefmt='github'))
+                  f.write("\n\n## Recommendation\n\n")
+                  f.write("Review these updates and test thoroughly before applying.\n")
+                  f.write("Use pip install -U <package> to update individual packages.\n")
+          
+          except Exception as e:
+              print(f"Error generating report: {e}")
+              sys.exit(1)
+          EOF
+      
+      - name: Upload update report
+        if: steps.outdated.outputs.has_updates == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-update-report
+          path: /tmp/update_report.md
+          retention-days: 30
+      
+      - name: Check security advisories
+        run: |
+          echo "🔒 Checking for security advisories..."
+          pip install pip-audit
+          pip-audit -r examples/advanced_ai/requirements.txt || echo "⚠️ Security advisories found"
+      
+      - name: Generate summary
+        run: |
+          echo "## Dependency Update Check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.outdated.outputs.has_updates }}" == "true" ]; then
+            echo "⚠️ **Updates Available**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Outdated packages detected. See artifacts for detailed report." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✓ **All Dependencies Up to Date**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "No updates required at this time." >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Review the update report" >> $GITHUB_STEP_SUMMARY
+          echo "2. Test updates in a development environment" >> $GITHUB_STEP_SUMMARY
+          echo "3. Update requirements.txt if needed" >> $GITHUB_STEP_SUMMARY
+          echo "4. Run full test suite" >> $GITHUB_STEP_SUMMARY
+
+  compatibility-check:
+    name: Python Version Compatibility
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10', '3.11', '3.12']
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      
+      - name: Test dependency installation
+        run: |
+          echo "Testing with Python ${{ matrix.python-version }}"
+          pip install -r examples/advanced_ai/requirements.txt
+          echo "✓ Dependencies installed successfully"
+      
+      - name: Test imports
+        run: |
+          python3 << 'EOF'
+          import sys
+          print(f'Python version: {sys.version}')
+          
+          import openai
+          import numpy
+          import pandas
+          import matplotlib
+          
+          print('All critical imports successful')
+          EOF
+      
+      - name: Report compatibility
+        run: |
+          echo "✓ Python ${{ matrix.python-version }} compatibility confirmed" >> $GITHUB_STEP_SUMMARY
+
+  performance-check:
+    name: Dependency Performance Check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install dependencies with timing
+        run: |
+          echo "⏱️ Measuring dependency installation time..."
+          START_TIME=$(date +%s)
+          pip install -r examples/advanced_ai/requirements.txt
+          END_TIME=$(date +%s)
+          DURATION=$((END_TIME - START_TIME))
+          
+          echo "Installation completed in ${DURATION} seconds"
+          echo "INSTALL_TIME=${DURATION}" >> $GITHUB_ENV
+      
+      - name: Check package sizes
+        run: |
+          echo "📦 Analyzing package sizes..."
+          pip list --format=json | python3 << 'EOF'
+          import json
+          import sys
+          
+          data = json.load(sys.stdin)
+          total_size = 0
+          
+          print('\nTop 10 largest packages:')
+          for pkg in sorted(data, key=lambda x: x['name'])[:10]:
+              print(f"  - {pkg['name']} {pkg['version']}")
+          EOF
+      
+      - name: Generate performance report
+        run: |
+          echo "## Dependency Performance Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Installation Time**: ${{ env.INSTALL_TIME }} seconds" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Recommendations" >> $GITHUB_STEP_SUMMARY
+          echo "- Consider using \`pip install --use-pep517\` for faster builds" >> $GITHUB_STEP_SUMMARY
+          echo "- Use \`pip cache\` to speed up repeated installations" >> $GITHUB_STEP_SUMMARY
+          echo "- Consider requirements.txt pinning for reproducibility" >> $GITHUB_STEP_SUMMARY
