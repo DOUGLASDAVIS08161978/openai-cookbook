@@ -4,6 +4,20 @@
 # should build pages for, and indicates metadata such as tags, creation date and
 # authors for each page.
 
+- title: Advanced AI Architecture with Quantum Enhancements
+  path: examples/advanced_ai/advanced_ai_architecture.ipynb
+  date: 2025-11-14
+  authors:
+    - DOUGLASDAVIS08161978
+  tags:
+    - advanced
+    - quantum
+    - architecture
+    - ai-architecture
+    - multi-agent
+    - adaptive-systems
+    - production-patterns
+
 - title: Self-Evolving Agents - A Cookbook for Autonomous Agent Retraining
   path: examples/partners/self_evolving_agents/autonomous_agent_retraining.ipynb
   date: 2025-11-04
