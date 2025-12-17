@@ -4,6 +4,18 @@
 # should build pages for, and indicates metadata such as tags, creation date and
 # authors for each page.
 
+- title: Transcribing User Audio with a Separate Realtime Request
+  path: examples/Realtime_out_of_band_transcription.ipynb
+  date: 2025-11-20
+  authors:
+    - minh-hoque
+  tags:
+    - realtime
+    - transcription
+    - voice
+    - speech
+    - audio
+
 - title: Self-Evolving Agents - A Cookbook for Autonomous Agent Retraining
   path: examples/partners/self_evolving_agents/autonomous_agent_retraining.ipynb
   date: 2025-11-04
@@ -293,7 +305,7 @@
     - gpt-oss-fine-tuning
 
 - title: Temporal Agents with Knowledge Graphs
-  path: examples/partners/temporal_agents_with_knowledge_graphs/temporal_agents_with_knowledge_graphs.ipynb
+  path: examples/partners/temporal_agents_with_knowledge_graphs/temporal_agents.ipynb
   date: 2025-07-22
   authors:
     - dwigg-openai
@@ -2650,5 +2662,53 @@
     - samarth-oai
   tags:
     - gpt-5.1
+
+- title: GPT-5.1-Codex-Max Prompting Guide
+  path: examples/gpt-5/gpt-5-1-codex-max_prompting_guide.ipynb
+  date: 2025-12-04
+  authors:
+    - nm-openai
+  tags:
+    - codex
     - responses
-    - reasoning
+    - compaction
+
+- title: Modernizing your Codebase with Codex
+  path: examples/codex/code_modernization.md
+  date: 2025-11-19
+  authors:
+    - derrickchoi-openai
+  tags:
+    - codex
+
+- title: OpenAI Compliance Logs Platform quickstart
+  path: examples/chatgpt/compliance_api/logs_platform.ipynb
+  date: 2025-12-11
+  authors:
+    - kevinv-openai
+  tags:
+    - chatgpt
+    - chatgpt-data
+    - chatgpt-and-api
+    - compliance
+    - enterprise
+
+- title: GPT-5.2 Prompting Guide
+  path: examples/gpt-5/gpt-5-2_prompting_guide.ipynb
+  date: 2025-12-11
+  authors:
+    - msingh-openai
+    - emreokcular
+  tags:
+    - gpt-5.2
+
+- title: Gpt-image-1.5 Prompting Guide
+  path: examples/multimodal/image-gen-1.5-prompting_guide.ipynb
+  date: 2025-12-16
+  authors:
+    - annikab-oai
+    - msingh-openai
+    - emreokcular
+  tags:
+    - images 
+    - vision
